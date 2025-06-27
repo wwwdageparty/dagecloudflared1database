@@ -1,4 +1,4 @@
-[English Version](README_EN.md) [中文版本](README_CN.md)
+🌐 [English Version](README_EN.md)   |   🇨🇳 [中文版本](README_CN.md)
 
 # Dage D1 Cloudflare Worker API
 
