@@ -330,11 +330,22 @@ async function getRecordsWithOptions(db, tableName, options = {}) {
  */
 async function updateRecord(db, tableName, id, updates) {
   try {
+    const validColumns = [
+      'c1', 'c2', 'c3',
+      'i1', 'i2', 'i3',
+      'd1', 'd2', 'd3',
+      't1', 't2', 't3',
+      'v1', 'v2', 'v3'
+    ];
+
     const setClauses = [];
     const bindValues = [];
 
     for (const key in updates) {
       if (Object.prototype.hasOwnProperty.call(updates, key)) {
+        if (!validColumns.includes(key)) {
+          throw new Error(`Invalid column name: ${key}`);
+        }
         setClauses.push(`${key} = ?`);
         bindValues.push(updates[key]);
       }
@@ -344,13 +355,21 @@ async function updateRecord(db, tableName, id, updates) {
       throw new Error('No fields provided for update.');
     }
 
+    // Optional: auto-update v2 as last modified timestamp
+    if (!updates.v2) {
+      setClauses.push(`v2 = CURRENT_TIMESTAMP`);
+    }
+
     const query = `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = ?;`;
     bindValues.push(id);
 
     const result = await db.prepare(query).bind(...bindValues).run();
-    return result;
-  }
-   catch (error) {
+
+    return {
+      success: result.success,
+      changes: result.meta.changes,
+    };
+  } catch (error) {
     console.error(`Error updating record ID ${id} in table ${tableName}:`, error);
     throw new Error(`Failed to update record: ${error.message}`);
   }
