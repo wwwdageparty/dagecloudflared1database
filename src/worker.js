@@ -91,6 +91,7 @@ function authenticateRequest(request, env) {
 
   const WRITE_TOKEN = env.WRITE_TOKEN;
   const READ_ONLY_TOKEN = env.READ_ONLY_TOKEN;
+  const DB_DA_SYSTEM_TABLENAME = "__DA_SYSTEM_CONFIG";
 
   if (token === WRITE_TOKEN) {
     return { isAuthenticated: true, canWrite: true, canRead: true, message: 'Authenticated with write access.' };
@@ -140,6 +141,31 @@ async function createTable(db, tableName, c1Unique = false) {
       ? `CREATE INDEX IF NOT EXISTS idx_${tableName}_c1 ON ${tableName}(c1);`
       : null;
 
+    // ℹ️ User data should start from ID 101 and up
+    const queries = [{ sql: tableSchema }];
+
+    if (indexSchema) {
+      queries.push({ sql: indexSchema });
+    }
+
+    const results = [];
+
+    for (const q of queries) {
+      const statement = q.params ? db.prepare(q.sql).bind(...q.params) : db.prepare(q.sql);
+      const result = await statement.run();
+      results.push(result);
+    }
+
+    return results;
+  } catch (error) {
+    console.error(`Error creating table ${tableName}:`, error);
+    throw new Error(`Failed to create table: ${error.message}`);
+  }
+}
+
+async function daSystemTableInit(db) {
+  try {
+    const tableName = DB_DA_SYSTEM_TABLENAME;
     const newUuid = crypto.randomUUID();
 
     // Insert reserved record for tracking DB version (id = 1)
@@ -152,13 +178,6 @@ async function createTable(db, tableName, c1Unique = false) {
     const systemReserveInsertQuery = `
       INSERT INTO ${tableName} (id, c1) VALUES (100, '___systemReserve');
     `;
-
-    // ℹ️ User data should start from ID 101 and up
-    const queries = [{ sql: tableSchema }];
-
-    if (indexSchema) {
-      queries.push({ sql: indexSchema });
-    }
 
     queries.push(
       { sql: versionInsertQuery, params: [newUuid, DB_VERSION, DB_VERSION] },
@@ -175,7 +194,7 @@ async function createTable(db, tableName, c1Unique = false) {
 
     return results;
   } catch (error) {
-    console.error(`Error creating table ${tableName}:`, error);
+    console.error(`Error init system table ${tableName}:`, error);
     throw new Error(`Failed to create table: ${error.message}`);
   }
 }
@@ -569,7 +588,26 @@ export default {
         return jsonResponse(1, 'Internal server error during table drop.', { details: error.message }, 500);
       }
     }
-
+    
+    // Handle table creation endpoint: /api/create-table
+    if (pathSegments[1] === 'initsystem' && method === 'POST') {
+      if (!auth.canWrite) {
+        return jsonResponse(1, 'Forbidden: Write access required to create tables.', null, 403);
+      }
+      try {
+        const createResult = await createTable(env.DB, DB_DA_SYSTEM_TABLENAME, true);
+        if (createResult.every(r => r.success)) {
+          await daSystemTableInit(env.DB);
+          return jsonResponse(0, null, { message: `system init successfully.`, results: createResult }, 201);
+        } else {
+          return jsonResponse(1, 'Failed to create table or insert initial data. Some operations failed.', createResult, 500);
+        }
+      } catch (error) {
+        console.error('Error in create-table endpoint:', error);
+        return jsonResponse(1, 'Internal server error during table creation.', { details: error.message }, 500);
+      }
+    }
+    
     // Handle table creation endpoint: /api/create-table
     if (pathSegments[1] === 'create-table' && method === 'POST') {
       if (!auth.canWrite) {
