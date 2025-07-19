@@ -179,6 +179,7 @@ async function daSystemTableInit(db) {
       INSERT INTO ${tableName} (id, c1) VALUES (100, '___systemReserve');
     `;
 
+    let queries = [];
     queries.push(
       { sql: versionInsertQuery, params: [newUuid, DB_VERSION, DB_VERSION] },
       { sql: systemReserveInsertQuery }
