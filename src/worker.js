@@ -45,6 +45,7 @@
 
 
 const DB_VERSION = 1;
+const DB_DA_SYSTEM_TABLENAME = "__DA_SYSTEM_CONFIG";
 
 
 /**
@@ -91,7 +92,6 @@ function authenticateRequest(request, env) {
 
   const WRITE_TOKEN = env.WRITE_TOKEN;
   const READ_ONLY_TOKEN = env.READ_ONLY_TOKEN;
-  const DB_DA_SYSTEM_TABLENAME = "__DA_SYSTEM_CONFIG";
 
   if (token === WRITE_TOKEN) {
     return { isAuthenticated: true, canWrite: true, canRead: true, message: 'Authenticated with write access.' };
