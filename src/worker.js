@@ -194,7 +194,7 @@ async function daSystemTableInit(db) {
 
     return results;
   } catch (error) {
-    console.error(`Error init system table ${tableName}:`, error);
+    console.error(`Error init system table ${DB_DA_SYSTEM_TABLENAME}:`, error);
     throw new Error(`Failed to create table: ${error.message}`);
   }
 }
