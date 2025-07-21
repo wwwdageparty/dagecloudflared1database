@@ -752,7 +752,7 @@ export default {
                 const updateData = await request.json();
                 const updateResult = await updateRecord(env.DB, tableName, id, updateData);
                 if (updateResult.success) {
-                    return jsonResponse(0, null, { message: 'Record updated successfully', changes: updateResult.meta.changes });
+                    return jsonResponse(0, null, { message: 'Record updated successfully', changes: updateResult.changes });
                 } else {
                     return jsonResponse(1, 'Failed to update record', { details: updateResult.error }, 500);
                 }
