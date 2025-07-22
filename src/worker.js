@@ -179,7 +179,6 @@ async function daSystemTableInit(db) {
       INSERT INTO ${tableName} (id, c1) VALUES (100, '___systemReserve');
     `;
 
-    let queries = [];
     queries.push(
       { sql: versionInsertQuery, params: [newUuid, DB_VERSION, DB_VERSION] },
       { sql: systemReserveInsertQuery }
@@ -195,7 +194,7 @@ async function daSystemTableInit(db) {
 
     return results;
   } catch (error) {
-    console.error(`Error init system table ${DB_DA_SYSTEM_TABLENAME}:`, error);
+    console.error(`Error init system table ${tableName}:`, error);
     throw new Error(`Failed to create table: ${error.message}`);
   }
 }
@@ -298,6 +297,8 @@ async function getRecordsByC1(db, tableName, c1Value) {
  * @param {number} [options.maxId] - Maximum ID value (id < maxId).
  * @param {number} [options.limit] - Maximum number of records to return.
  * @param {number} [options.offset] - Number of records to skip.
+ * @param {string} [options.orderby] - order by which column
+ * @param {string} [options.order] - order by column asc or desc
  * @returns {Promise<Array<object>>} An array of matching records.
  */
 async function getRecordsWithOptions(db, tableName, options = {}) {
@@ -320,7 +321,10 @@ async function getRecordsWithOptions(db, tableName, options = {}) {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    query += ` ORDER BY id ASC`; // Ensure consistent ordering for pagination
+    const order = options.order === 'desc' ? 'DESC' : 'ASC';
+    const orderBy = checkColumnValid(options.orderby) ? options.orderby : 'id';
+
+    query += ` ORDER BY ${orderBy} ${order}`;
 
     if (options.limit !== undefined && options.limit !== null) {
       query += ` LIMIT ?`;
@@ -350,20 +354,12 @@ async function getRecordsWithOptions(db, tableName, options = {}) {
  */
 async function updateRecord(db, tableName, id, updates) {
   try {
-    const validColumns = [
-      'c1', 'c2', 'c3',
-      'i1', 'i2', 'i3',
-      'd1', 'd2', 'd3',
-      't1', 't2', 't3',
-      'v1', 'v2', 'v3'
-    ];
-
     const setClauses = [];
     const bindValues = [];
 
     for (const key in updates) {
       if (Object.prototype.hasOwnProperty.call(updates, key)) {
-        if (!validColumns.includes(key)) {
+        if (!checkColumnValid(key)) {
           throw new Error(`Invalid column name: ${key}`);
         }
         setClauses.push(`${key} = ?`);
@@ -731,9 +727,11 @@ export default {
                     const maxIdParam = url.searchParams.has('max_id') ? parseInt(url.searchParams.get('max_id')) : undefined; // This maxId is for filtering records
                     const limit = url.searchParams.has('limit') ? parseInt(url.searchParams.get('limit')) : undefined;
                     const offset = url.searchParams.has('offset') ? parseInt(url.searchParams.get('offset')) : undefined;
+                    const order = url.searchParams.get('order');
+                    const orderby = url.searchParams.get('orderby');
 
-                    if (minId !== undefined || maxIdParam !== undefined || limit !== undefined || offset !== undefined) {
-                        const records = await getRecordsWithOptions(env.DB, tableName, { minId, maxId: maxIdParam, limit, offset });
+                    if (minId !== undefined || maxIdParam !== undefined || limit !== undefined || offset !== undefined || order !== undefined || orderby !== undefined) {
+                        const records = await getRecordsWithOptions(env.DB, tableName, { minId, maxId: maxIdParam, limit, offset, order, orderby });
                         return jsonResponse(0, null, records);
                     } else {
                         // If no specific ID, c1, or new options, return all records
@@ -752,7 +750,7 @@ export default {
                 const updateData = await request.json();
                 const updateResult = await updateRecord(env.DB, tableName, id, updateData);
                 if (updateResult.success) {
-                    return jsonResponse(0, null, { message: 'Record updated successfully', changes: updateResult.changes });
+                    return jsonResponse(0, null, { message: 'Record updated successfully', changes: updateResult.changes});
                 } else {
                     return jsonResponse(1, 'Failed to update record', { details: updateResult.error }, 500);
                 }
@@ -783,3 +781,16 @@ export default {
     return jsonResponse(1, 'Invalid API path.', null, 404);
   },
 };
+
+
+function checkColumnValid(key) {
+  const validColumns = [
+    'c1', 'c2', 'c3',
+    'i1', 'i2', 'i3',
+    'd1', 'd2', 'd3',
+    't1', 't2', 't3',
+    'v1', 'v2', 'v3'
+  ];
+  return validColumns.includes(key);
+}
+ 
