@@ -164,8 +164,8 @@ async function createTable(db, tableName, c1Unique = false) {
 }
 
 async function daSystemTableInit(db) {
+  const tableName = DB_DA_SYSTEM_TABLENAME;
   try {
-    const tableName = DB_DA_SYSTEM_TABLENAME;
     const newUuid = crypto.randomUUID();
 
     // Insert reserved record for tracking DB version (id = 1)
@@ -179,6 +179,7 @@ async function daSystemTableInit(db) {
       INSERT INTO ${tableName} (id, c1) VALUES (100, '___systemReserve');
     `;
 
+    let queries = [];
     queries.push(
       { sql: versionInsertQuery, params: [newUuid, DB_VERSION, DB_VERSION] },
       { sql: systemReserveInsertQuery }
