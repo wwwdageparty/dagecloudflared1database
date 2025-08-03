@@ -290,16 +290,21 @@ async function getRecordsByC1(db, tableName, c1Value) {
 }
 
 /**
- * Fetches records from the specified table with optional filtering, limiting, and offsetting.
+ * Fetches records from the specified table with optional filtering, ordering, and keyset pagination.
+ * 
+ * ⚠️ Cloudflare D1 charges row reads toward a daily 5 million row-read limit.
+ * Therefore, this function avoids using SQL OFFSET, which scans and discards rows unnecessarily.
+ * Instead, we use keyset pagination (WHERE id > ?) to minimize row reads.
+ * 
  * @param {D1Database} db - The D1 database instance.
  * @param {string} tableName - The name of the table to fetch from.
- * @param {object} [options={}] - An object containing optional query parameters.
- * @param {number} [options.minId] - Minimum ID value (id > minId).
+ * @param {object} [options={}] - Optional query parameters.
+ * @param {number} [options.minId] - Minimum ID value (id > minId). Cannot be used with offset.
  * @param {number} [options.maxId] - Maximum ID value (id < maxId).
  * @param {number} [options.limit] - Maximum number of records to return.
- * @param {number} [options.offset] - Number of records to skip.
- * @param {string} [options.orderby] - order by which column
- * @param {string} [options.order] - order by column asc or desc
+ * @param {number} [options.offset] - Acts as a pagination cursor (id > offset). Cannot be used with minId.
+ * @param {string} [options.orderby] - Column to order by.
+ * @param {string} [options.order] - 'asc' or 'desc'.
  * @returns {Promise<Array<object>>} An array of matching records.
  */
 async function getRecordsWithOptions(db, tableName, options = {}) {
@@ -308,15 +313,25 @@ async function getRecordsWithOptions(db, tableName, options = {}) {
     const params = [];
     const conditions = [];
 
-    if (options.minId !== undefined && options.minId !== null) {
+    // Prevent ambiguity: only one of minId or offset can be used
+    if (options.minId !== undefined && options.offset !== undefined) {
+      throw new Error("Cannot use both 'minId' and 'offset' together.");
+    }
+
+    // Use offset as default pagination cursor (avoids costly OFFSET scans)
+    if (options.offset !== undefined && options.offset !== null) {
+      conditions.push(`id > ?`);
+      params.push(options.offset);
+    } else if (options.minId !== undefined && options.minId !== null) {
       conditions.push(`id > ?`);
       params.push(options.minId);
     }
+
+    // Optional upper bound
     if (options.maxId !== undefined && options.maxId !== null) {
       conditions.push(`id < ?`);
       params.push(options.maxId);
     }
-    // Add other conditions here if needed (e.g., c1_value)
 
     if (conditions.length > 0) {
       query += ` WHERE ${conditions.join(' AND ')}`;
@@ -324,7 +339,6 @@ async function getRecordsWithOptions(db, tableName, options = {}) {
 
     const order = options.order === 'desc' ? 'DESC' : 'ASC';
     const orderBy = checkColumnValid(options.orderby) ? options.orderby : 'id';
-
     query += ` ORDER BY ${orderBy} ${order}`;
 
     if (options.limit !== undefined && options.limit !== null) {
@@ -332,10 +346,12 @@ async function getRecordsWithOptions(db, tableName, options = {}) {
       params.push(options.limit);
     }
 
-    if (options.offset !== undefined && options.offset !== null) {
-      query += ` OFFSET ?`;
-      params.push(options.offset);
-    }
+    // ❌ Do NOT use SQL OFFSET — it consumes rows even when discarding them.
+    // // Example (intentionally disabled):
+    // if (options.offset !== undefined && options.offset !== null) {
+    //   query += ` OFFSET ?`;
+    //   params.push(options.offset);
+    // }
 
     const { results } = await db.prepare(query).bind(...params).all();
     return results;
